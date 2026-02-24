@@ -53,6 +53,7 @@ jobs:
           )
 
           data = r.json()
+          print(data)
 
           try:
               with open(STATE_FILE, "r") as f:
