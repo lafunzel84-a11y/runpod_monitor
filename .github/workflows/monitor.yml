@@ -26,15 +26,14 @@ jobs:
           TG_TOKEN = os.environ["TG_TOKEN"]
           TG_CHAT = os.environ["TG_CHAT"]
 
-          STATE_FILE = "state.json"
-
           query = """
           {
             gpuTypes {
+              id
               displayName
               memoryInGb
-              locations {
-                id
+              gpuTypeAvailabilities {
+                locationId
                 stockStatus
               }
             }
@@ -43,7 +42,7 @@ jobs:
 
           headers = {
               "Content-Type": "application/json",
-              "Authorization": f"Bearer {RUNPOD_API_KEY}"
+              "Authorization": RUNPOD_API_KEY
           }
 
           r = requests.post(
@@ -53,37 +52,32 @@ jobs:
           )
 
           data = r.json()
-          print(data)
 
-          try:
-              with open(STATE_FILE, "r") as f:
-                  prev_state = json.load(f)
-          except:
-              prev_state = {}
-
-          current_state = {}
+          if "errors" in data:
+              print("GraphQL Error:", data["errors"])
+              exit(1)
 
           for gpu in data["data"]["gpuTypes"]:
               name = gpu["displayName"]
 
+              # A100-SXM 정확히 필터
               if "A100" in name and "SXM" in name:
-                  for loc in gpu["locations"]:
-                      if loc["id"] == "AP-JP-1":
+
+                  for loc in gpu["gpuTypeAvailabilities"]:
+                      if loc["locationId"] == "AP-JP-1":
 
                           status = loc["stockStatus"]
-                          key = f"{name}_JP"
-                          current_state[key] = status
 
                           if status in ["AVAILABLE", "LOW_STOCK"]:
-                              if prev_state.get(key) != status:
+                              msg = f"[JP] {name} → {status}"
+                              print("Sending alert:", msg)
 
-                                  msg = f"[JP] {name} → {status}"
-                                  requests.post(
-                                      f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                                      data={"chat_id": TG_CHAT, "text": msg}
-                                  )
-
-          with open(STATE_FILE, "w") as f:
-              json.dump(current_state, f)
+                              requests.post(
+                                  f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                                  data={
+                                      "chat_id": TG_CHAT,
+                                      "text": msg
+                                  }
+                              )
 
           EOF
