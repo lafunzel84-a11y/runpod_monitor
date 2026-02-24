@@ -25,46 +25,85 @@ jobs:
           TG_TOKEN = os.environ["TG_TOKEN"]
           TG_CHAT = os.environ["TG_CHAT"]
 
-          query = """
-          query {
-            gpuTypes {
-              id
-              displayName
-              memoryInGb
-            }
-          }
-          """
-
           headers = {
               "Content-Type": "application/json",
               "Authorization": RUNPOD_API_KEY
           }
 
+          # 1️⃣ GPU Type ID 찾기
+          gpu_query = """
+          query {
+            gpuTypes {
+              id
+              displayName
+            }
+          }
+          """
+
           r = requests.post(
               "https://api.runpod.io/graphql",
-              json={"query": query},
+              json={"query": gpu_query},
               headers=headers
           )
 
           data = r.json()
 
-          if "errors" in data:
-              print("GraphQL Error:", data["errors"])
-              exit(1)
+          target_gpu_id = None
 
           for gpu in data["data"]["gpuTypes"]:
-              name = gpu["displayName"]
+              if "A100" in gpu["displayName"] and "SXM" in gpu["displayName"]:
+                  target_gpu_id = gpu["id"]
 
-              if "A100" in name and "SXM" in name:
-                  msg = f"[JP CHECK] Found GPU Type: {name}"
-                  print(msg)
+          if not target_gpu_id:
+              print("A100 SXM not found.")
+              exit(0)
 
-                  requests.post(
-                      f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                      data={
-                          "chat_id": TG_CHAT,
-                          "text": msg
-                      }
-                  )
+          # 2️⃣ 배치 가능 여부 테스트 (실제 생성은 안 됨)
+          deploy_query = f"""
+          mutation {{
+            podFindAndDeployOnDemand(
+              input: {{
+                name: "stock-check-temp"
+                gpuTypeId: "{target_gpu_id}"
+                cloudType: SECURE
+                gpuCount: 1
+                volumeInGb: 20
+                containerDiskInGb: 20
+                minVcpuCount: 4
+                minMemoryInGb: 16
+                dockerArgs: ""
+                ports: "8888/http"
+                volumeMountPath: "/workspace"
+                startSsh: false
+                supportPublicIp: false
+                dataCenterId: "AP-JP-1"
+              }}
+            ) {{
+              id
+            }}
+          }}
+          """
+
+          r2 = requests.post(
+              "https://api.runpod.io/graphql",
+              json={"query": deploy_query},
+              headers=headers
+          )
+
+          result = r2.json()
+
+          if "errors" not in result:
+              msg = "🔥 A100-SXM AVAILABLE in JP!"
+              print(msg)
+
+              requests.post(
+                  f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                  data={
+                      "chat_id": TG_CHAT,
+                      "text": msg
+                  }
+              )
+          else:
+              print("Not available.")
 
           EOF
