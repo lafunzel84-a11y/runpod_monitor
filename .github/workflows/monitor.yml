@@ -1,4 +1,4 @@
-name: RunPod A100-SXM JP Monitor
+name: RunPod A100-SXM JP Safe Monitor
 
 on:
   schedule:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check RunPod Stock
+      - name: Safe Stock Check
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
@@ -20,6 +20,7 @@ jobs:
           python <<EOF
           import requests
           import os
+          import time
 
           RUNPOD_API_KEY = os.environ["RUNPOD_API_KEY"]
           TG_TOKEN = os.environ["TG_TOKEN"]
@@ -30,7 +31,7 @@ jobs:
               "Authorization": RUNPOD_API_KEY
           }
 
-          # 1️⃣ GPU Type ID 찾기
+          # 1️⃣ GPU ID 찾기
           gpu_query = """
           query {
             gpuTypes {
@@ -58,7 +59,7 @@ jobs:
               print("A100 SXM not found.")
               exit(0)
 
-          # 2️⃣ 배치 가능 여부 테스트 (실제 생성은 안 됨)
+          # 2️⃣ 배치 시도
           deploy_query = f"""
           mutation {{
             podFindAndDeployOnDemand(
@@ -92,8 +93,12 @@ jobs:
 
           result = r2.json()
 
-          if "errors" not in result:
-              msg = "🔥 A100-SXM AVAILABLE in JP!"
+          # 3️⃣ 재고 있음 → 생성 성공
+          if "errors" not in result and "data" in result:
+
+              pod_id = result["data"]["podFindAndDeployOnDemand"]["id"]
+
+              msg = "🔥 A100-SXM AVAILABLE in JP! (Auto-terminating)"
               print(msg)
 
               requests.post(
@@ -103,6 +108,24 @@ jobs:
                       "text": msg
                   }
               )
+
+              # 4️⃣ 즉시 삭제
+              terminate_query = f"""
+              mutation {{
+                podTerminate(input: {{ podId: "{pod_id}" }})
+              }}
+              """
+
+              time.sleep(2)
+
+              requests.post(
+                  "https://api.runpod.io/graphql",
+                  json={"query": terminate_query},
+                  headers=headers
+              )
+
+              print("Temporary pod terminated.")
+
           else:
               print("Not available.")
 
