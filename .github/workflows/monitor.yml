@@ -20,22 +20,17 @@ jobs:
           python <<EOF
           import requests
           import os
-          import json
 
           RUNPOD_API_KEY = os.environ["RUNPOD_API_KEY"]
           TG_TOKEN = os.environ["TG_TOKEN"]
           TG_CHAT = os.environ["TG_CHAT"]
 
           query = """
-          {
+          query {
             gpuTypes {
               id
               displayName
               memoryInGb
-              gpuTypeAvailabilities {
-                locationId
-                stockStatus
-              }
             }
           }
           """
@@ -60,24 +55,16 @@ jobs:
           for gpu in data["data"]["gpuTypes"]:
               name = gpu["displayName"]
 
-              # A100-SXM 정확히 필터
               if "A100" in name and "SXM" in name:
+                  msg = f"[JP CHECK] Found GPU Type: {name}"
+                  print(msg)
 
-                  for loc in gpu["gpuTypeAvailabilities"]:
-                      if loc["locationId"] == "AP-JP-1":
-
-                          status = loc["stockStatus"]
-
-                          if status in ["AVAILABLE", "LOW_STOCK"]:
-                              msg = f"[JP] {name} → {status}"
-                              print("Sending alert:", msg)
-
-                              requests.post(
-                                  f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                                  data={
-                                      "chat_id": TG_CHAT,
-                                      "text": msg
-                                  }
-                              )
+                  requests.post(
+                      f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                      data={
+                          "chat_id": TG_CHAT,
+                          "text": msg
+                      }
+                  )
 
           EOF
