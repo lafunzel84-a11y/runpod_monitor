@@ -2,7 +2,7 @@ name: RunPod A100-SXM JP Safe Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "4,11,18,25,32,39,46,53 * * * *"
   workflow_dispatch:
 
 jobs:
