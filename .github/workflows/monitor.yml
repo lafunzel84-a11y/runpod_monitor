@@ -11,14 +11,20 @@ jobs:
 
     steps:
       - name: Check RunPod Stock
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
         run: |
           pip install requests
           python <<EOF
-          import requests, os, json
+          import requests
+          import os
+          import json
 
-          API_KEY = "${{ secrets.RUNPOD_API_KEY }}"
-          TG_TOKEN = "${{ secrets.TG_TOKEN }}"
-          TG_CHAT = "${{ secrets.TG_CHAT }}"
+          RUNPOD_API_KEY = os.environ["RUNPOD_API_KEY"]
+          TG_TOKEN = os.environ["TG_TOKEN"]
+          TG_CHAT = os.environ["TG_CHAT"]
 
           STATE_FILE = "state.json"
 
@@ -48,7 +54,6 @@ jobs:
 
           data = r.json()
 
-          # 이전 상태 불러오기
           try:
               with open(STATE_FILE, "r") as f:
                   prev_state = json.load(f)
@@ -60,19 +65,15 @@ jobs:
           for gpu in data["data"]["gpuTypes"]:
               name = gpu["displayName"]
 
-              # A100-SXM 정확히 필터
               if "A100" in name and "SXM" in name:
-
                   for loc in gpu["locations"]:
                       if loc["id"] == "AP-JP-1":
 
                           status = loc["stockStatus"]
                           key = f"{name}_JP"
-
                           current_state[key] = status
 
                           if status in ["AVAILABLE", "LOW_STOCK"]:
-
                               if prev_state.get(key) != status:
 
                                   msg = f"[JP] {name} → {status}"
@@ -81,7 +82,6 @@ jobs:
                                       data={"chat_id": TG_CHAT, "text": msg}
                                   )
 
-          # 상태 저장
           with open(STATE_FILE, "w") as f:
               json.dump(current_state, f)
 
