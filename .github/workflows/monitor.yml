@@ -37,7 +37,7 @@ jobs:
 
           headers = {
               "Content-Type": "application/json",
-              "Authorization": f"Bearer {API_KEY}"
+              "Authorization": f"Bearer {RUNPOD_API_KEY}"
           }
 
           r = requests.post(
