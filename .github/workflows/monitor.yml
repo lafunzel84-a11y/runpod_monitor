@@ -1,0 +1,88 @@
+name: RunPod A100-SXM JP Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check-stock:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check RunPod Stock
+        run: |
+          pip install requests
+          python <<EOF
+          import requests, os, json
+
+          API_KEY = "${{ secrets.RUNPOD_API_KEY }}"
+          TG_TOKEN = "${{ secrets.TG_TOKEN }}"
+          TG_CHAT = "${{ secrets.TG_CHAT }}"
+
+          STATE_FILE = "state.json"
+
+          query = """
+          {
+            gpuTypes {
+              displayName
+              memoryInGb
+              locations {
+                id
+                stockStatus
+              }
+            }
+          }
+          """
+
+          headers = {
+              "Content-Type": "application/json",
+              "Authorization": f"Bearer {API_KEY}"
+          }
+
+          r = requests.post(
+              "https://api.runpod.io/graphql",
+              json={"query": query},
+              headers=headers
+          )
+
+          data = r.json()
+
+          # 이전 상태 불러오기
+          try:
+              with open(STATE_FILE, "r") as f:
+                  prev_state = json.load(f)
+          except:
+              prev_state = {}
+
+          current_state = {}
+
+          for gpu in data["data"]["gpuTypes"]:
+              name = gpu["displayName"]
+
+              # A100-SXM 정확히 필터
+              if "A100" in name and "SXM" in name:
+
+                  for loc in gpu["locations"]:
+                      if loc["id"] == "AP-JP-1":
+
+                          status = loc["stockStatus"]
+                          key = f"{name}_JP"
+
+                          current_state[key] = status
+
+                          if status in ["AVAILABLE", "LOW_STOCK"]:
+
+                              if prev_state.get(key) != status:
+
+                                  msg = f"[JP] {name} → {status}"
+                                  requests.post(
+                                      f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                                      data={"chat_id": TG_CHAT, "text": msg}
+                                  )
+
+          # 상태 저장
+          with open(STATE_FILE, "w") as f:
+              json.dump(current_state, f)
+
+          EOF
